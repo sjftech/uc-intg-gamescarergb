@@ -314,18 +314,18 @@ async def _handle_setup_request(msg: ucapi.DriverSetupRequest) -> ucapi.SetupAct
     fields = [
         {
             "id": "_host",
-            "label": {"en": "Host"},
-            "field": {"label": {"value": {"en": host}}},
+            "label": {"en": "Host (do not change)"},
+            "field": {"text": {"value": host}},
         },
         {
             "id": "_name",
-            "label": {"en": "Device name"},
-            "field": {"label": {"value": {"en": name}}},
+            "label": {"en": "Device name (do not change)"},
+            "field": {"text": {"value": name}},
         },
         {
             "id": "_extensions",
-            "label": {"en": "Extension boards"},
-            "field": {"label": {"value": {"en": str(extensions)}}},
+            "label": {"en": "Extension boards (do not change)"},
+            "field": {"text": {"value": str(extensions)}},
         },
         {
             "id": "port_0",
