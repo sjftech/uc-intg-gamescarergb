@@ -1,6 +1,6 @@
-# Games Care RGB Switch — Unfolded Circle Remote 3 Integration
+# Games Care RGB Switch — Unfolded Circle Remote 2/3 Integration
 
-An integration driver for the [Unfolded Circle Remote 3](https://www.unfoldedcircle.com/) that exposes a select entity for switching inputs on a [Games Care RGB Switch](https://www.gamescare.eu/).
+An integration driver for the [Unfolded Circle Remote 2/3](https://www.unfoldedcircle.com/) that exposes a select entity for switching inputs on a [Games Care RGB Switch](https://gamescarestore.com/).
 
 Supports up to 4 boards (32 ports) via extension boards. Each input port can be given a custom name during setup.
 
@@ -10,7 +10,7 @@ Supports up to 4 boards (32 ports) via extension boards. Each input port can be 
 - Supports 1–4 boards (8, 16, 24, or 32 ports)
 - Custom port names set during setup (e.g. "PS2", "GameCube", "SNES")
 - Reconfigure at any time to rename ports
-- Runs directly on the UCR3 remote — no external server needed
+- Runs directly on the UCR2/3 remote — no external server needed
 
 ---
 
