@@ -1,0 +1,29 @@
+{
+  "driver_id": "uc-intg-gamescarergb",
+  "name": { "en": "Games Care RGB Switch" },
+  "icon": "uc:tv",
+  "description": { "en": "Switch inputs on a Games Care RGB Switch" },
+  "version": "1.0.0",
+  "developer": { "name": "Community", "url": "https://github.com/sjftech/uc-intg-gamescarergb" },
+  "min_core_api": "0.5.1",
+  "setup_data_schema": {
+    "title": { "en": "Games Care RGB Switch Setup" },
+    "settings": [
+      {
+        "id": "host",
+        "label": { "en": "IP Address or Hostname" },
+        "field": { "text": { "value": "", "placeholder": { "en": "e.g. 192.168.1.100" } } }
+      },
+      {
+        "id": "name",
+        "label": { "en": "Device Name" },
+        "field": { "text": { "value": "GC RGB Switch" } }
+      },
+      {
+        "id": "extensions",
+        "label": { "en": "Number of extension boards (0 = 8 ports, 1 = 16 ports, 2 = 24 ports, 3 = 32 ports)" },
+        "field": { "text": { "value": "0" } }
+      }
+    ]
+  }
+}
