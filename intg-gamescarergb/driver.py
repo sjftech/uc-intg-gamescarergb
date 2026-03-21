@@ -1,7 +1,7 @@
 """
 Games Care RGB Switch integration driver for Unfolded Circle Remote 3.
 
-Exposes a select entity for switching between named inputs on a
+Exposes a media_player entity for switching between named inputs on a
 Games Care RGB Switch. Supports up to 4 boards (32 ports) via extension boards.
 
 API: GET http://{host}/ports?force={port_number}
@@ -17,8 +17,9 @@ from typing import Any
 
 import aiohttp
 import ucapi
-from ucapi.select import Attributes as SelectAttr
-from ucapi.select import States as SelectStates
+from ucapi.media_player import Attributes as MediaAttr
+from ucapi.media_player import Features as MediaFeatures
+from ucapi.media_player import States as MediaStates
 
 _LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -39,11 +40,8 @@ AUTO_PORT = 0
 loop = asyncio.new_event_loop()
 api = ucapi.IntegrationAPI(loop)
 
-# In-memory config: list of {"id": str, "host": str, "name": str, "port_names": list[str]}
-# port_names[0] = Auto name, port_names[1] = Port 1 name, etc.
 _devices: list[dict] = []
 _session: aiohttp.ClientSession | None = None
-# Track current port per device: {entity_id: port_index}
 _current_ports: dict[str, int] = {}
 
 
@@ -82,17 +80,15 @@ def _save_config(devices: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 def _device_id(host: str) -> str:
-    """Stable entity ID derived from hostname."""
     return f"gamescarergb_{host.replace('.', '_').replace('-', '_')}"
 
 
 def _default_port_names(total_ports: int) -> list[str]:
-    """Generate default port names: Auto, Port 1, Port 2, ..."""
+    """port_names[0] = Auto, port_names[1..N] = Port 1..N"""
     return ["Auto"] + [f"Port {i}" for i in range(1, total_ports + 1)]
 
 
 async def _send_port_command(host: str, port: int) -> bool:
-    """Send a port selection command to the switch."""
     global _session
     if _session is None or _session.closed:
         _session = aiohttp.ClientSession()
@@ -111,7 +107,6 @@ async def _send_port_command(host: str, port: int) -> bool:
 
 
 async def _test_connection(host: str) -> bool:
-    """Test that the switch is reachable."""
     return await _send_port_command(host, AUTO_PORT)
 
 
@@ -120,48 +115,41 @@ async def _test_connection(host: str) -> bool:
 # ---------------------------------------------------------------------------
 
 async def _cmd_handler(
-    entity: ucapi.Select,
+    entity: ucapi.media_player.MediaPlayer,
     cmd_id: str,
     params: dict[str, Any] | None,
     websocket: Any,
 ) -> ucapi.StatusCodes:
-    """Handle select commands from the remote."""
+    """Handle media player commands from the remote."""
     device = next((d for d in _devices if _device_id(d["host"]) == entity.id), None)
     if device is None:
         _LOGGER.error("Command received for unknown entity: %s", entity.id)
         return ucapi.StatusCodes.NOT_FOUND
 
-    port_names: list[str] = device["port_names"]
+    host = device["host"]
     entity_id = entity.id
+    port_names: list[str] = device["port_names"]
+    source_list = port_names[1:]
     current_port = _current_ports.get(entity_id, AUTO_PORT)
 
-    if cmd_id == "select_option":
-        option = params.get("option") if params else None
-        if option is None or option not in port_names:
-            _LOGGER.warning("Unknown option: %s", option)
+    if cmd_id == "on":
+        target = current_port if current_port > AUTO_PORT else 1
+        return await _apply_port(entity_id, host, target, port_names)
+
+    if cmd_id == "off":
+        return await _apply_port(entity_id, host, AUTO_PORT, port_names)
+
+    if cmd_id == "toggle":
+        target = AUTO_PORT if current_port > AUTO_PORT else 1
+        return await _apply_port(entity_id, host, target, port_names)
+
+    if cmd_id == "select_source":
+        source = params.get("source") if params else None
+        if source is None or source not in source_list:
+            _LOGGER.warning("Unknown source: %s", source)
             return ucapi.StatusCodes.BAD_REQUEST
-        port = port_names.index(option)
-        return await _apply_port(entity_id, device["host"], port, port_names)
-
-    if cmd_id == "select_next":
-        cycle = params.get("cycle", False) if params else False
-        next_port = current_port + 1
-        if next_port >= len(port_names):
-            next_port = 0 if cycle else current_port
-        return await _apply_port(entity_id, device["host"], next_port, port_names)
-
-    if cmd_id == "select_previous":
-        cycle = params.get("cycle", False) if params else False
-        prev_port = current_port - 1
-        if prev_port < 0:
-            prev_port = len(port_names) - 1 if cycle else current_port
-        return await _apply_port(entity_id, device["host"], prev_port, port_names)
-
-    if cmd_id == "select_first":
-        return await _apply_port(entity_id, device["host"], 0, port_names)
-
-    if cmd_id == "select_last":
-        return await _apply_port(entity_id, device["host"], len(port_names) - 1, port_names)
+        port = source_list.index(source) + 1
+        return await _apply_port(entity_id, host, port, port_names)
 
     _LOGGER.warning("Unknown command: %s", cmd_id)
     return ucapi.StatusCodes.BAD_REQUEST
@@ -170,40 +158,52 @@ async def _cmd_handler(
 async def _apply_port(
     entity_id: str, host: str, port: int, port_names: list[str]
 ) -> ucapi.StatusCodes:
-    """Send the port command and update entity state."""
     success = await _send_port_command(host, port)
     if not success:
         return ucapi.StatusCodes.SERVER_ERROR
+
     _current_ports[entity_id] = port
+    source_list = port_names[1:]
+    current_source = port_names[port] if port > AUTO_PORT else ""
+    state = MediaStates.OFF if port == AUTO_PORT else MediaStates.ON
+
     api.configured_entities.update_attributes(
         entity_id,
         {
-            SelectAttr.STATE: SelectStates.ON,
-            SelectAttr.CURRENT_OPTION: port_names[port],
+            MediaAttr.STATE: state,
+            MediaAttr.SOURCE: current_source,
+            MediaAttr.SOURCE_LIST: source_list,
         },
     )
     return ucapi.StatusCodes.OK
 
 
-def _create_entity(device: dict) -> ucapi.Select:
-    """Build a Select entity for a Games Care RGB Switch."""
+def _create_entity(device: dict) -> ucapi.media_player.MediaPlayer:
     entity_id = _device_id(device["host"])
     port_names: list[str] = device["port_names"]
+    source_list = port_names[1:]
     current_port = _current_ports.get(entity_id, AUTO_PORT)
-    return ucapi.Select(
+    state = MediaStates.OFF if current_port == AUTO_PORT else MediaStates.ON
+    current_source = port_names[current_port] if current_port > AUTO_PORT else ""
+
+    return ucapi.media_player.MediaPlayer(
         entity_id,
         {"en": device["name"]},
-        attributes={
-            SelectAttr.STATE: SelectStates.ON,
-            SelectAttr.CURRENT_OPTION: port_names[current_port],
-            SelectAttr.OPTIONS: port_names,
+        [
+            MediaFeatures.ON_OFF,
+            MediaFeatures.TOGGLE,
+            MediaFeatures.SELECT_SOURCE,
+        ],
+        {
+            MediaAttr.STATE: state,
+            MediaAttr.SOURCE: current_source,
+            MediaAttr.SOURCE_LIST: source_list,
         },
         cmd_handler=_cmd_handler,
     )
 
 
 def _register_entities() -> None:
-    """Register all configured devices as available entities."""
     for device in _devices:
         entity = _create_entity(device)
         if not api.available_entities.contains(entity.id):
@@ -244,13 +244,16 @@ async def on_subscribe_entities(entity_ids: list[str]):
         if device is None:
             continue
         port_names = device["port_names"]
+        source_list = port_names[1:]
         current_port = _current_ports.get(entity_id, AUTO_PORT)
+        state = MediaStates.OFF if current_port == AUTO_PORT else MediaStates.ON
+        current_source = port_names[current_port] if current_port > AUTO_PORT else ""
         api.configured_entities.update_attributes(
             entity_id,
             {
-                SelectAttr.STATE: SelectStates.ON,
-                SelectAttr.CURRENT_OPTION: port_names[current_port],
-                SelectAttr.OPTIONS: port_names,
+                MediaAttr.STATE: state,
+                MediaAttr.SOURCE: current_source,
+                MediaAttr.SOURCE_LIST: source_list,
             },
         )
 
@@ -265,7 +268,6 @@ async def on_unsubscribe_entities(entity_ids: list[str]):
 # ---------------------------------------------------------------------------
 
 async def driver_setup_handler(msg: ucapi.SetupDriver) -> ucapi.SetupAction:
-    """Dispatch driver setup requests."""
     if isinstance(msg, ucapi.DriverSetupRequest):
         return await _handle_setup_request(msg)
     if isinstance(msg, ucapi.UserDataResponse):
@@ -274,10 +276,6 @@ async def driver_setup_handler(msg: ucapi.SetupDriver) -> ucapi.SetupAction:
 
 
 async def _handle_setup_request(msg: ucapi.DriverSetupRequest) -> ucapi.SetupAction:
-    """
-    Step 1: Receive host, name, extensions from driver.json form.
-    Validate connection then ask for port names.
-    """
     host = msg.setup_data.get("host", "").strip()
     host = host.removeprefix("https://").removeprefix("http://").strip("/")
     name = msg.setup_data.get("name", "GC RGB Switch").strip() or "GC RGB Switch"
@@ -288,8 +286,6 @@ async def _handle_setup_request(msg: ucapi.DriverSetupRequest) -> ucapi.SetupAct
     except ValueError:
         extensions = 0
 
-    _LOGGER.debug("Setup step 1: host=%s name=%s extensions=%d", host, name, extensions)
-
     if not host:
         return ucapi.SetupError(ucapi.IntegrationSetupError.NOT_FOUND)
 
@@ -299,18 +295,14 @@ async def _handle_setup_request(msg: ucapi.DriverSetupRequest) -> ucapi.SetupAct
 
     total_ports = PORTS_PER_BOARD * (extensions + 1)
 
-    # Look up existing port names if reconfiguring
     device_id = _device_id(host)
     existing = next((d for d in _devices if d["id"] == device_id), None)
     existing_names = existing["port_names"] if existing else _default_port_names(total_ports)
 
-    # Pad or trim existing names to match new port count
-    # existing_names[0] = Auto, [1..N] = ports
     while len(existing_names) < total_ports + 1:
         existing_names.append(f"Port {len(existing_names)}")
     existing_names = existing_names[:total_ports + 1]
 
-    # Build port name fields for step 2
     fields = [
         {
             "id": "_host",
@@ -348,12 +340,8 @@ async def _handle_setup_request(msg: ucapi.DriverSetupRequest) -> ucapi.SetupAct
 
 
 async def _handle_user_data(msg: ucapi.UserDataResponse) -> ucapi.SetupAction:
-    """
-    Step 2: Receive port names, save config, register entity.
-    """
     input_values = msg.input_values
 
-    # Recover host/name/extensions from hidden label fields
     host = input_values.get("_host", "").strip()
     name = input_values.get("_name", "GC RGB Switch").strip() or "GC RGB Switch"
     try:
@@ -399,9 +387,7 @@ async def _handle_user_data(msg: ucapi.UserDataResponse) -> ucapi.SetupAction:
 # ---------------------------------------------------------------------------
 
 async def main():
-    """Start the integration."""
     global _devices
-
     _devices = _load_config()
     _LOGGER.info("Loaded %d configured device(s)", len(_devices))
 
@@ -409,7 +395,6 @@ async def main():
         _current_ports[_device_id(device["host"])] = AUTO_PORT
 
     _register_entities()
-
     await api.init("driver.json", driver_setup_handler)
 
 
