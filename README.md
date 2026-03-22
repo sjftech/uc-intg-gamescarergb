@@ -1,12 +1,12 @@
 # Games Care RGB Switch — Unfolded Circle Remote 2/3 Integration
 
-An integration driver for the [Unfolded Circle Remote 2/3](https://www.unfoldedcircle.com/) that exposes a select entity for switching inputs on a [Games Care RGB Switch](https://gamescarestore.com/).
+An integration driver for the [Unfolded Circle Remote 2/3](https://www.unfoldedcircle.com/) that exposes a media_player entity for switching inputs on a [Games Care RGB Switch](https://gamescarestore.com/).
 
 Supports up to 4 boards (32 ports) via extension boards. Each input port can be given a custom name during setup.
 
 ## Features
 
-- Select entity with named inputs for clean, readable switching
+- media_player entity with named inputs for clean, readable switching
 - Supports 1–4 boards (8, 16, 24, or 32 ports)
 - Custom port names set during setup (e.g. "PS2", "GameCube", "SNES")
 - Reconfigure at any time to rename ports
@@ -45,5 +45,5 @@ To rename inputs, go to the integration in your remote's settings and select **R
 ## Notes
 
 - The switch communicates over plain **HTTP** on port 80 — no SSL
-- Port 0 is the **Auto** mode (no forced input) — you can rename this to anything (e.g. "Off")
+- Port 0 is the **Auto** mode (no forced input) which is also configured as "Power Off" as it turns off the bright blue LED indicators
 - The remote tracks the active input in memory; it resets to Auto if the integration restarts
